@@ -1,0 +1,82 @@
+n = 4  # modify for set size
+
+MATCHING = 0
+PREFERENCE = 1
+
+print_ln('There are %s suitors', n)
+
+pref_suitors = MultiArray([n, n], sint)
+pref_reviewers = MultiArray([n, n], sint)
+
+unmatched_suitors = sint.Array(n)
+matched_reviewers = sint.Array(n)
+
+suitor_matching = MultiArray([n, 2], sint)
+reviewer_matching = MultiArray([n, 2], sint)
+
+suitor_matching.assign_all(sint(-1))
+reviewer_matching.assign_all(sint(-1))
+unmatched_suitors.assign_all(sint(1))  # all suitors are unmatched
+matched_reviewers.assign_all(sint(0))
+
+################### read input #######################
+@for_range(n)
+def _(i):
+	pref_suitors[i] = sint.get_input_from(0, size = n)
+	
+@for_range(n)
+def _(i):
+	pref_reviewers[i] = sint.get_input_from(1, size = n)
+################### read input #######################
+
+
+new_suitor_match = sint.Array(2)
+new_suitor_match.assign_all(sint(-1))
+new_reviewer_match = sint.Array(2)
+new_reviewer_match.assign_all(sint(-1))
+
+# exactly same as in the paper
+@while_do(lambda x: x < n, regint(0))
+def _(i):
+    @for_range(n)
+    def _(j):
+        unmatched_suitor = sint(-1)
+        rematched_reviewer = sint(-1)
+        unmatched = unmatched_suitors[j]
+      
+        for k in range(n):
+            condition = ( suitor_matching[j][PREFERENCE] < pref_suitors[j][k] ) * ( reviewer_matching[k][PREFERENCE] < pref_reviewers[k][j] ) * unmatched  
+            unmatched_suitor = (condition == 1).if_else(reviewer_matching[k][MATCHING], unmatched_suitor)
+            suitor_matching[j][MATCHING] = (condition == 1).if_else(sint(k), suitor_matching[j][MATCHING])
+            suitor_matching[j][PREFERENCE] = (condition == 1).if_else(pref_suitors[j][k], suitor_matching[j][PREFERENCE])            
+            unmatched_suitors[j] = (condition == 1).if_else(sint(0), unmatched_suitors[j])
+            rematched_reviewer = (condition == 1).if_else(sint(k), rematched_reviewer)
+            new_reviewer_match[MATCHING] = (condition == 1).if_else(sint(j), new_reviewer_match[MATCHING])
+            new_reviewer_match[PREFERENCE] = (condition == 1).if_else(pref_reviewers[k][j], new_reviewer_match[PREFERENCE])
+
+        for z in range(n):
+            condition = (z == unmatched_suitor)
+            unmatched_suitors[z] = (condition == 1).if_else(sint(1), unmatched_suitors[z])
+            suitor_matching[z][MATCHING] = (condition == 1).if_else(sint(-1), suitor_matching[z][MATCHING])
+            suitor_matching[z][PREFERENCE] = (condition == 1).if_else(sint(-1), suitor_matching[z][PREFERENCE])
+
+        for z in range(n):
+            condition = (z == rematched_reviewer)
+            reviewer_matching[z][MATCHING] = (condition == 1).if_else(new_reviewer_match[MATCHING], reviewer_matching[z][MATCHING])
+            reviewer_matching[z][PREFERENCE] = (condition == 1).if_else(new_reviewer_match[PREFERENCE], reviewer_matching[z][PREFERENCE])
+    
+    print_ln('iteration %s done', i+1)
+    return i+1
+
+# reveal matches
+print_ln('Suitor Matching')
+@for_range(n)
+def _(i):
+	print_ln('%s %s', suitor_matching[i][0].reveal(), suitor_matching[i][1].reveal())
+
+print_ln('Reviewer Matching')
+@for_range(n)
+def _(i):
+	print_ln('%s %s', reviewer_matching[i][0].reveal(), reviewer_matching[i][1].reveal())
+
+

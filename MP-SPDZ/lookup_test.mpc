@@ -1,0 +1,196 @@
+import math
+n = 4  # modify for set size
+
+############### lookup tables #################
+#Lookup table creation. Lookup table for rows contains, at index i, a permutation matrix that can shift the rows of a matrix by i downwards when multiplied with it.
+#The column lookup table similarly shifts the columns i steps towards the right on multiplication with the matrix at index i
+
+lookup_table_row=MultiArray([n,n,n],cint)
+lookup_table_column=MultiArray([n,n,n],cint)
+lookup_table_row.assign_all(0)
+lookup_table_column.assign_all(0)
+
+@for_range(n)
+def _(i):
+    @for_range(n)
+    def _(j):
+        k = (((i+j)>=n)*(-n)+(i+j))
+        lookup_table_row[i][k][j]=1
+        lookup_table_column[i][j][k]=1
+############### lookup tables #################
+
+############## helper functions ###############
+
+#Multiply a scalar quantity with a matrix
+def pointwise_matrix_mul(multiplier, matrix, n):
+	output = MultiArray([n, n],sint)
+	@for_range(n)
+	def _(i):
+	    for j in range(n):
+	        output[i][j]=matrix[i][j] * multiplier
+	return output
+
+#Add two matrices
+def pointwise_matrix_add(matrix1, matrix2, n):
+	@for_range(n)
+	def _(i):
+	    for j in range(n):
+	        matrix1[i][j]=matrix1[i][j] + matrix2[i][j]
+
+#Return the matrix at index r from the lookup table
+def permutation_matrix_selection(r, n, lookup_table):
+    comparisons = sint.Array(n)
+	#Secure camparison of all possible indices with r stored in comparisons
+    @for_range(n)
+    def _(i):
+        comparisons[i] = (r == i)
+
+    summation_terms = MultiArray([n,n,n],sint)
+    #The matrix at each index is multiplied with the result of comparison for that index.
+    #All matrices returned are 0 matrices except for the one at index r
+    @for_range(n)
+    def _(i):
+        summation_terms[i] = pointwise_matrix_mul(comparisons[i], lookup_table[i], n)
+
+    permutation_matrix = MultiArray([n,n],sint)
+    permutation_matrix.assign_all(sint(0))
+    @for_range(n)
+    def _(i):
+        pointwise_matrix_add(permutation_matrix,summation_terms[i], n)
+
+    return permutation_matrix
+
+# securely extract a row/column from a matrix
+def extract_from_mat(axis,i,mat):
+    #Generate a random number in the range of the power of 2
+    bits = math.ceil(math.log2(n))
+    r = sint.get_random_int(bits)
+    i_dash = ((i + r)%n).reveal()
+    if axis == 0:
+        #Select approprtiate permutation matrices from the lookup tables
+        shift_matrix = permutation_matrix_selection(r,n,lookup_table_row)
+        #Perform the permutations
+        result_mat = shift_matrix.direct_mul_to_matrix(mat)
+    else:
+        #Select approprtiate permutation matrices from the lookup tables
+        shift_matrix = permutation_matrix_selection(r,n,lookup_table_column)
+        #Perform the permutations
+        result_mat = mat.direct_mul_to_matrix(shift_matrix)
+
+    output = sint.Array(n)
+    @for_range(n)
+    def _(k):
+        if axis == 0:
+            output[k]=result_mat[i_dash][k]
+        else:
+            output[k]=result_mat[k][i_dash]
+    return output
+
+# securely extract a value from an array
+def extract_from_arr(i,arr):
+    bits = math.ceil(math.log2(n))
+    r = sint.get_random_int(bits)
+    i_dash = ((i + r)%n).reveal()
+    shift_matrix = permutation_matrix_selection(r,n,lookup_table_row)
+    result = shift_matrix.direct_mul_to_matrix(arr)
+    output=result[i_dash][0]
+    return output
+############## helper functions ###############
+MATCHING = 0
+PREFERENCE = 1
+
+print_ln('There are %s suitors', n)
+
+pref_suitors = MultiArray([n, n], sint)
+pref_reviewers = MultiArray([n, n], sint)
+
+reviewer_matching = MultiArray([n, 2], sint)
+suitor_matching = sint.Array(n)
+suitor_preference = MultiArray([n, 1], sint)
+unmatched_suitors = sint.Array(n)
+matched_reviewers = sint.Array(n)
+
+reviewer_matching.assign_all(sint(-1))
+suitor_matching.assign_all(sint(-1))
+suitor_preference.assign_all(sint(-1))
+unmatched_suitors.assign_all(sint(1))  # all suitors are unmatched
+matched_reviewers.assign_all(sint(0))
+
+################### read input #######################
+@for_range(n)
+def _(i):
+	pref_suitors[i] = sint.get_input_from(0, size = n)
+	
+@for_range(n)
+def _(i):
+	pref_reviewers[i] = sint.get_input_from(1, size = n)
+################### read input #######################
+
+new_reviewer_match = sint.Array(2)
+new_reviewer_match.assign_all(sint(-1))
+
+
+@while_do(lambda x: x < n**2, regint(0))   # should be while true
+def _(i):
+
+    ######### check for unmatched suitors  ##########
+    v,m = sint(0),sint(-1)
+    for p in range(n):
+        v = (1-v)*unmatched_suitors[p]
+        m = v*(p-m)+m
+    
+    @if_((m == -1).reveal())
+    def _():
+        #print_ln('m -- %s', m.reveal())
+        break_loop()
+    ######### check for unmatched suitors  ##########
+    
+    ############   secure extraction  ###########
+    suit_pref = extract_from_arr(m,suitor_preference)
+    suitor_pref = extract_from_mat(0,m,pref_suitors)
+    reviewer_pref = extract_from_mat(1,m,pref_reviewers)
+    ############   secure extraction  ###########
+    
+    # eaxctly same as in the paper
+    unmatched_suitor = sint(-1)
+    rematched_reviewer = sint(-1)
+    unmatched = sint(1)
+    
+    for k in range(n):
+        condition = ( suit_pref < suitor_pref[k] ) * ( reviewer_matching[k][PREFERENCE] < reviewer_pref[k] ) #* unmatched  
+        unmatched_suitor = (condition == 1).if_else(reviewer_matching[k][MATCHING], unmatched_suitor)
+        rematched_reviewer = (condition == 1).if_else(sint(k), rematched_reviewer)
+        suit_pref = (condition == 1).if_else(suitor_pref[k], suit_pref)
+        new_reviewer_match[MATCHING] = (condition == 1).if_else(m, new_reviewer_match[MATCHING])
+        new_reviewer_match[PREFERENCE] = (condition == 1).if_else(reviewer_pref[k], new_reviewer_match[PREFERENCE])
+
+    for z in range(n):
+        condition = (z == unmatched_suitor)
+        unmatched_suitors[z] = (condition == 1).if_else(sint(1), unmatched_suitors[z])
+        suitor_matching[z] = (condition == 1).if_else(sint(-1), suitor_matching[z])
+        suitor_preference[z][0] = (condition == 1).if_else(sint(-1), suitor_preference[z][0])
+
+        condition = (z == m)
+        unmatched_suitors[z] = (condition == 1).if_else(sint(0), unmatched_suitors[z])
+        suitor_matching[z] = (condition == 1).if_else(rematched_reviewer, suitor_matching[z])
+        suitor_preference[z][0] = (condition == 1).if_else(suit_pref, suitor_preference[z][0])
+
+    for z in range(n):
+        condition = (z == rematched_reviewer)
+        reviewer_matching[z][MATCHING] = (condition == 1).if_else(new_reviewer_match[MATCHING], reviewer_matching[z][MATCHING])
+        reviewer_matching[z][PREFERENCE] = (condition == 1).if_else(new_reviewer_match[PREFERENCE], reviewer_matching[z][PREFERENCE])
+    
+    print_ln('iteration %s done', i+1)
+    return i+1
+
+# reveal matches
+print_ln('Suitor Matching')
+@for_range(n)
+def _(i):
+	print_ln('%s %s', suitor_matching[i].reveal(), suitor_preference[i][0].reveal())
+
+print_ln('Reviewer Matching')
+@for_range(n)
+def _(i):
+	print_ln('%s %s', reviewer_matching[i][0].reveal(), reviewer_matching[i][1].reveal())
+
