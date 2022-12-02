@@ -1,0 +1,101 @@
+n = 4  # modify for set size
+
+MATCHING = 0
+PREFERENCE = 1
+
+print_ln('There are %s suitors', n)
+
+pref_suitors = sint.Matrix(n, n)
+pref_reviewers = sint.Matrix(n, n)
+
+unmatched_suitors = sint.Array(n)
+matched_reviewers = sint.Array(n)
+
+suitor_matching = sint.Matrix(n, 2)
+reviewer_matching = sint.Matrix(n, 2)
+
+@for_range(len(suitor_matching))
+def _(i):
+	suitor_matching[i][0] = sint(-1)
+	suitor_matching[i][1] = sint(-1)
+	reviewer_matching[i][0] = sint(-1)
+	reviewer_matching[i][1] = sint(-1)
+	unmatched_suitors[i] = sint(1)   # all suitors are unmatched
+	matched_reviewers[i] = sint(0)
+
+################################################
+# read from file
+@for_range(n)
+def _(i):
+    @for_range(n)
+    def _(j):
+        pref_suitors[i][j] = sint.get_private_input_from(0,1)
+@for_range(n)
+def _(i):
+    @for_range(n)
+    def _(j):
+        pref_reviewers[i][j] = sint.get_private_input_from(0,1)
+
+################################################
+
+new_suitor_match = sint.Array(2)
+new_reviewer_match = sint.Array(2)
+
+@for_range(len(new_suitor_match))
+def _(i):
+	new_suitor_match[i] = sint(-1)
+	new_reviewer_match[i] = sint(-1)
+
+#h  = sint.get_private_input_from(0)
+#start_timer(1)
+
+# exactly same as in the paper
+@while_do(lambda x: x < n, regint(0))
+def _(i):
+    @for_range(n)
+    def _(j):
+        unmatched_suitor = sint(-1)
+        rematched_reviewer = sint(-1)
+        unmatched = unmatched_suitors[j]
+
+
+        for k in range(n):
+            condition = (( suitor_matching[j][PREFERENCE] < pref_suitors[j][k] ) * ( reviewer_matching[k][PREFERENCE] < pref_reviewers[k][j] ) * unmatched)
+            unmatched_suitor = (condition * (reviewer_matching[k][MATCHING] - unmatched_suitor)) + unmatched_suitor 
+            suitor_matching[j][MATCHING] = (condition * (sint(k) - suitor_matching[j][MATCHING])) + suitor_matching[j][MATCHING]
+            suitor_matching[j][PREFERENCE] = (condition * (pref_suitors[j][k] - suitor_matching[j][PREFERENCE])) + suitor_matching[j][PREFERENCE]
+            unmatched_suitors[j] = (condition * (sint(0) - unmatched_suitors[j])) + unmatched_suitors[j]
+            rematched_reviewer = (condition * (sint(k) - rematched_reviewer)) + rematched_reviewer
+            new_reviewer_match[MATCHING] = (condition * (sint(j) - new_reviewer_match[MATCHING])) + new_reviewer_match[MATCHING]
+            new_reviewer_match[PREFERENCE] = (condition * (pref_reviewers[k][j] - new_reviewer_match[PREFERENCE])) + new_reviewer_match[PREFERENCE]
+
+        for z in range(n):
+            condition = (z == unmatched_suitor)
+            unmatched_suitors[z] = (condition * (sint(1) - unmatched_suitors[z])) + unmatched_suitors[z]
+            suitor_matching[z][MATCHING] = (condition * (sint(-1) - suitor_matching[z][MATCHING])) + suitor_matching[z][MATCHING]
+            suitor_matching[z][PREFERENCE] = (condition * (sint(-1) - suitor_matching[z][PREFERENCE])) + suitor_matching[z][PREFERENCE]
+        
+
+        for z in range(n):
+            condition = (z == rematched_reviewer)
+            reviewer_matching[z][MATCHING] = (condition * (new_reviewer_match[MATCHING] - reviewer_matching[z][MATCHING])) + reviewer_matching[z][MATCHING]
+            reviewer_matching[z][PREFERENCE] = (condition * (new_reviewer_match[PREFERENCE] - reviewer_matching[z][PREFERENCE])) + reviewer_matching[z][PREFERENCE]
+                      
+
+    print_ln('iteration %s done', i+1)
+    return i+1
+
+#stop_timer(1)
+
+print_ln('Suitor Matching')
+@for_range(n)
+def _(i):
+	print_ln('%s %s', suitor_matching[i][0].reveal(), suitor_matching[i][1].reveal())
+
+print_ln('Reviewer Matching')
+@for_range(n)
+def _(i):
+	print_ln('%s %s', reviewer_matching[i][0].reveal(), reviewer_matching[i][1].reveal())
+
+
+
